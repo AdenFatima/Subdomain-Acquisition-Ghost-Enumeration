@@ -34,4 +34,4 @@ python core/dns_engine.py subdomain1.example.com subdomain2.example.com
 
 ### Testing
 
-Validated using a local mock DNS server (`tests/mock_dns_server.py`) with controlled "live" and "dangling" CNAME test cases, confirming the engine correctly distinguishes between the two. See `tests/` for details.
+Valide it against any domain of your choice
