@@ -1,0 +1,47 @@
+{
+  "github_pages": {
+    "display_name": "GitHub Pages",
+    "patterns": [
+      "*.github.io"
+    ]
+  },
+  "heroku": {
+    "display_name": "Heroku",
+    "patterns": [
+      "*.herokuapp.com",
+      "*.herokudns.com"
+    ]
+  },
+  "aws_s3": {
+    "display_name": "AWS S3",
+    "patterns": [
+      "*.s3.amazonaws.com",
+      "*.s3-website*.amazonaws.com",
+      "*.s3.*.amazonaws.com",
+      "*.s3-website.*.amazonaws.com"
+    ]
+  },
+  "azure_app_service": {
+    "display_name": "Azure App Service",
+    "patterns": [
+      "*.azurewebsites.net",
+      "*.cloudapp.azure.com",
+      "*.cloudapp.net",
+      "*.trafficmanager.net"
+    ]
+  },
+  "vercel": {
+    "display_name": "Vercel",
+    "patterns": [
+      "cname.vercel-dns.com",
+      "*.vercel.app"
+    ]
+  },
+  "netlify": {
+    "display_name": "Netlify",
+    "patterns": [
+      "*.netlify.app",
+      "*.netlify.com"
+    ]
+  }
+}
