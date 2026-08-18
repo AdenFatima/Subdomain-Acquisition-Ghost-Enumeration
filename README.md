@@ -9,7 +9,7 @@ SAGE is a Subdomain Takeover Detection Framework. You give it a domain (like exa
 |---|---|---|
 | 1 | DNS Resolution Engine (async CNAME chain resolution, wildcard detection) | ✅ Done |
 | 2 | Cloud Provider Fingerprinting | ✅ Done |
-| 3 | HTTP/HTTPS Active Verification (signature-based) | 🚧 In progress |
+| 3 | HTTP/HTTPS Active Verification (signature-based) | ✅ Done |
 | 4 | Confidence Scoring Engine | ⬜ Not started |
 | 5 | JSON/HTML Reporting | ⬜ Not started |
 | 6 | Subdomain Enumeration (wordlist + subfinder integration) | ⬜ Not started |
@@ -20,17 +20,39 @@ SAGE is a Subdomain Takeover Detection Framework. You give it a domain (like exa
 Takes one or more hostnames and:
 - Resolves CNAME records asynchronously
 - Follows multi-hop CNAME chains to their final target
-- Checks whether the final target still resolves to an A/AAAA record
-- Flags subdomains as **CNAME candidates** when they have a CNAME pointing to a target with no live A/AAAA record — the DNS-level signature of a potentially dangling resource
+- Checks whether the final target has an A/AAAA record (DNS-level only — see important note below)
+- Flags subdomains as **CNAME candidates** when they have a CNAME pointing to a target with no A/AAAA record
 - Detects wildcard DNS on a domain (to avoid false positives)
 
 ### Phase 2 — Cloud Provider Fingerprinting (`providers/__init__.py`, `config/providers.json`)
 Takes a CNAME candidate's final target hostname and classifies which cloud provider it belongs to (GitHub Pages, Heroku, AWS S3, Azure App Service, Vercel, Netlify), by matching against domain patterns defined in `config/providers.json`. Unknown providers are flagged for manual review rather than discarded or misclassified.
 
-**Note:** DNS-level flagging + provider identification alone are *not* proof of a takeover — they identify candidates worth investigating further. Confirming an actual vulnerability requires HTTP-level signature verification (Phase 3, in progress).
+### Phase 3 — HTTP Signature Verification (`providers/github.py`, `heroku.py`, `aws.py`, `azure.py`, `vercel.py`, `netlify.py`)
+For each candidate with a known provider, sends a real HTTP request and checks the response body against that provider's documented "resource not found" signature (e.g. GitHub Pages' `"There isn't a GitHub Pages site here."`). This is the step that actually confirms a takeover is possible — DNS and provider matching alone only narrow down candidates.
 
-### Real-world validated finding
-During authorized testing (see Testing section below), it was confirmed that DNS-level checking alone produces a **false negative** for GitHub Pages specifically: GitHub's shared Pages infrastructure keeps answering on the same IPs regardless of whether a specific site exists, so a deleted site still shows an A record. The only reliable signal is the HTTP response body, which returns `"There isn't a GitHub Pages site here."` for unclaimed hostnames. This directly confirms why HTTP-level signature verification (Phase 3) is necessary rather than optional.
+**Run a provider verifier directly with:**
+```bash
+python -m providers.github hostname.github.io
+python -m providers.netlify hostname.netlify.app
+```
+(Use `-m` and dotted notation, not a direct file path — these modules share code via `providers/_base.py`.)
+
+## Important finding: why DNS-only detection isn't enough
+
+During authorized testing (see below), it was confirmed **twice, on two independent providers**, that DNS-level checking alone produces a **false negative**:
+
+- **GitHub Pages** and **Netlify** both run shared infrastructure — the same small set of IPs serves *every* customer's site. Deleting a specific site does **not** remove the A/AAAA record, because the shared servers keep answering regardless of whether that particular site still exists.
+- The only reliable signal is the **HTTP response body**, which contains a distinct "not found" message once the underlying resource is gone.
+
+This directly validates why the project's methodology treats HTTP-level signature verification as mandatory, not optional — a DNS-only tool would have reported both of these real, confirmed-dangling subdomains as safe.
+
+### Testing
+
+Validated against real, authorized subdomains — the domain owner granted explicit permission to test specific subdomains end-to-end (live CNAME → confirmed not vulnerable → underlying resource deleted → confirmed correctly flagged as dangling via HTTP signature match) on:
+- **GitHub Pages** — confirmed dangling, signature: `"There isn't a GitHub Pages site here."`
+- **Netlify** — confirmed dangling, signature: `"Not Found - Request ID"`
+
+The remaining four providers (Heroku, AWS S3, Azure App Service, Vercel) use the same documented public signature patterns used by established open-source recon tools, but have not yet been validated against a live, authorized dangling instance.
 
 ### Usage
 
@@ -38,8 +60,5 @@ During authorized testing (see Testing section below), it was confirmed that DNS
 pip install -r requirements.txt
 python core/dns_engine.py subdomain1.example.com subdomain2.example.com
 python providers/__init__.py hostname1 hostname2
+python -m providers.github hostname.github.io
 ```
-
-### Testing
-
-Validated against a real, authorized subdomain — the domain owner granted explicit permission to test a specific subdomain end-to-end (live CNAME → confirmed not vulnerable → resource deleted → confirmed correctly flagged as a dangling GitHub Pages CNAME).
