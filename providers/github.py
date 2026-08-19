@@ -83,7 +83,7 @@ if __name__ == "__main__":
     import sys
 
     async def _demo():
-        test_hosts = sys.argv[1:] or ["adenfatima.github.io"]
+        test_hosts = sys.argv[1:] or ["this-site-should-not-exist-xyz123.github.io"]
         # ThreadedResolver avoids a Windows-specific issue where aiodns
         # (used automatically by aiohttp when installed) fails to read
         # the system's configured DNS servers correctly.

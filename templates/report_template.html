@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SAGE Report - {{ metadata.target_domain }}</title>
+    <style>
+        :root {
+            --bg-base: #121212;
+            --bg-panel: #1e1e1e;
+            --text-main: #e0e0e0;
+            --text-muted: #888888;
+            --border-color: #333333;
+            
+            --risk-high-bg: #3a1c1c;
+            --risk-high-text: #d97777;
+            --risk-med-bg: #3a2e1c;
+            --risk-med-text: #d9a077;
+            --risk-low-bg: #1c2a3a;
+            --risk-low-text: #77a9d9;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            font-family: Arial, Helvetica, sans-serif;
+            margin: 0;
+            padding: 40px 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        header {
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            margin: 0 0 5px 0;
+            font-size: 2em;
+            font-weight: normal;
+        }
+
+        .meta-info {
+            color: var(--text-muted);
+            font-size: 0.9em;
+            margin-bottom: 20px;
+        }
+
+        .stats-grid {
+            display: flex;
+            gap: 15px;
+        }
+
+        .stat-box {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            padding: 15px 20px;
+            flex: 1;
+            border-radius: 4px;
+        }
+
+        .stat-label {
+            font-size: 0.85em;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            font-size: 1.5em;
+            margin-top: 5px;
+        }
+
+        h2 {
+            font-weight: normal;
+            margin-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            font-size: 1.4em;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            color: var(--text-muted);
+            font-size: 0.85em;
+            text-transform: uppercase;
+            background: #181818;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .badge {
+            padding: 4px 10px;
+            border-radius: 3px;
+            font-size: 0.85em;
+            display: inline-block;
+        }
+
+        .badge.high { background: var(--risk-high-bg); color: var(--risk-high-text); }
+        .badge.medium { background: var(--risk-med-bg); color: var(--risk-med-text); }
+        .badge.low { background: var(--risk-low-bg); color: var(--risk-low-text); }
+        .badge.none { background: #2a2a2a; color: var(--text-muted); }
+
+        .target-url {
+            font-family: monospace;
+            font-size: 1.1em;
+        }
+
+        .provider-info {
+            font-size: 0.85em;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>SAGE Scan Report</h1>
+        <div class="meta-info">
+            Target: <strong>{{ metadata.target_domain }}</strong> | Scanned: {{ metadata.scan_timestamp }}
+        </div>
+        
+        <div class="stats-grid">
+            <div class="stat-box">
+                <div class="stat-label">Total Scanned</div>
+                <div class="stat-value">{{ metadata.total_subdomains_scanned }}</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Dangling Targets</div>
+                <div class="stat-value">{{ metadata.cname_candidates_found }}</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">High Risk</div>
+                <div class="stat-value" style="color: var(--risk-high-text);">{{ metadata.findings_by_confidence.get('High', 0) }}</div>
+            </div>
+        </div>
+    </header>
+
+    <h2>Findings</h2>
+
+    {% set candidates = findings | selectattr("is_candidate") | list %}
+    
+    {% if candidates %}
+    <table>
+        <thead>
+            <tr>
+                <th>Resource</th>
+                <th>Risk Level</th>
+                <th>Details</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for finding in candidates %}
+            <tr>
+                <td>
+                    <div class="target-url">{{ finding.subdomain }}</div>
+                    <div class="provider-info">
+                        {{ finding.provider if finding.provider else "Unknown" }} &rarr; {{ finding.final_target }}
+                    </div>
+                </td>
+                <td>
+                    {% if finding.confidence == 'High' %}
+                        <span class="badge high">High Risk</span>
+                    {% elif finding.confidence == 'Medium' %}
+                        <span class="badge medium">Medium Risk</span>
+                    {% elif finding.confidence == 'Low' %}
+                        <span class="badge low">Low Risk</span>
+                    {% else %}
+                        <span class="badge none">None</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <div>{{ finding.reason }}</div>
+                    {% if finding.http_status_code %}
+                    <div class="provider-info">
+                        Status Code: {{ finding.http_status_code }}
+                    </div>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        No active subdomain takeover candidates were detected.
+    </div>
+    {% endif %}
+
+</div>
+
+</body>
+</html>

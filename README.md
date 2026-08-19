@@ -1,64 +1,194 @@
-# Subdomain-Acquisition-Ghost-Enumeration
-SAGE is a Subdomain Takeover Detection Framework. You give it a domain (like example.com), and it finds all subdomains (blog.example.com, api.example.com, etc.), checks if any of them point to cloud services that no longer exist, and tells you which ones an attacker could hijack.
+# 🔍 SAGE — Subdomain Acquisition & Ghost Enumeration
 
-## Project Status
+**SAGE** is an advanced, asynchronous subdomain takeover detection framework. It automates the full reconnaissance pipeline — from subdomain discovery to DNS chain resolution, cloud provider fingerprinting, and active HTTP-level vulnerability verification.
 
-🚧 **In active development.** Being built in phases as part of an internship project.
+Built for speed and accuracy, SAGE eliminates the false negatives common in traditional DNS-only reconnaissance tools by confirming dangling resources at the application layer, not just the DNS layer.
 
-| Phase | Component | Status |
-|---|---|---|
-| 1 | DNS Resolution Engine (async CNAME chain resolution, wildcard detection) | ✅ Done |
-| 2 | Cloud Provider Fingerprinting | ✅ Done |
-| 3 | HTTP/HTTPS Active Verification (signature-based) | ✅ Done |
-| 4 | Confidence Scoring Engine | ⬜ Not started |
-| 5 | JSON/HTML Reporting | ⬜ Not started |
-| 6 | Subdomain Enumeration (wordlist + subfinder integration) | ⬜ Not started |
+---
 
-## What works right now
+## 📖 Table of Contents
 
-### Phase 1 — DNS Resolution Engine (`core/dns_engine.py`)
-Takes one or more hostnames and:
-- Resolves CNAME records asynchronously
-- Follows multi-hop CNAME chains to their final target
-- Checks whether the final target has an A/AAAA record (DNS-level only — see important note below)
-- Flags subdomains as **CNAME candidates** when they have a CNAME pointing to a target with no A/AAAA record
-- Detects wildcard DNS on a domain (to avoid false positives)
+- [The SAGE Methodology](#-the-sage-methodology-solving-the-shared-ip-flaw)
+- [Core Architecture & Pipeline](#️-core-architecture--pipeline)
+- [Installation](#-installation)
+- [Usage](#-usage-guidelines)
+- [Directory Structure](#-directory-structure)
+- [Output Formats](#-output-formats)
+- [Contributing](#-contributing)
+- [Disclaimer](#️-disclaimer)
 
-### Phase 2 — Cloud Provider Fingerprinting (`providers/__init__.py`, `config/providers.json`)
-Takes a CNAME candidate's final target hostname and classifies which cloud provider it belongs to (GitHub Pages, Heroku, AWS S3, Azure App Service, Vercel, Netlify), by matching against domain patterns defined in `config/providers.json`. Unknown providers are flagged for manual review rather than discarded or misclassified.
+---
 
-### Phase 3 — HTTP Signature Verification (`providers/github.py`, `heroku.py`, `aws.py`, `azure.py`, `vercel.py`, `netlify.py`)
-For each candidate with a known provider, sends a real HTTP request and checks the response body against that provider's documented "resource not found" signature (e.g. GitHub Pages' `"There isn't a GitHub Pages site here."`). This is the step that actually confirms a takeover is possible — DNS and provider matching alone only narrow down candidates.
+## 🧠 The SAGE Methodology: Solving the "Shared IP" Flaw
 
-**Run a provider verifier directly with:**
+Traditional subdomain takeover tools typically rely on pure DNS analysis — for example, checking whether a CNAME points to a target with no corresponding A/AAAA record.
+
+Testing against modern cloud infrastructure has shown this approach produces **false negatives**:
+
+- Providers like **GitHub Pages** and **Netlify** use shared edge servers.
+- When a user deletes a deployed site, the underlying A/AAAA IP records often remain active globally.
+- As a result, DNS resolution alone cannot reliably confirm whether a resource is actually unclaimed.
+
+**The only reliable way to confirm a takeover is to inspect the HTTP response body for exact "resource not found" signatures.**
+
+SAGE enforces HTTP-level signature verification for all known providers, ensuring that every "High Risk" finding is immediately actionable and backed by concrete evidence — not just DNS inference.
+
+---
+
+## ⚙️ Core Architecture & Pipeline
+
+SAGE processes every target through a strict, five-phase pipeline:
+
+### 1. Discovery Engine (`core/enumerator.py`)
+Combines passive and active enumeration methodologies:
+- Automatically invokes `subfinder` for passive OSINT gathering (if installed).
+- Merges results seamlessly with active DNS brute-forcing using a customizable wordlist.
+
+### 2. DNS Resolution Engine (`core/dns_engine.py`)
+A highly concurrent `aiodns`-based resolver that:
+- Follows CNAME chains through to their final target.
+- Flags CNAMEs as potential dangling candidates without incorrectly dropping them due to shared A-records.
+- Actively detects and filters wildcard DNS misconfigurations to prevent false positives.
+
+### 3. Provider Fingerprinting (`providers/`)
+- Matches the final CNAME target against a centralized, easily updatable registry (`config/providers.json`).
+- Classifies the cloud service in use (e.g., AWS S3, Heroku, Azure, Vercel, GitHub Pages).
+- Unknown providers are explicitly flagged for manual review rather than silently discarded.
+
+### 4. HTTP Signature Verification (`providers/*`)
+- Sends an asynchronous HTTP/HTTPS request directly to the target subdomain.
+- Scans the response body against known provider error signatures (e.g., GitHub's *"There isn't a GitHub Pages site here."*) to definitively confirm the resource is unclaimed.
+
+### 5. Scoring & Reporting (`core/scorer.py` & `reports/`)
+- Evaluates combined DNS and HTTP evidence to assign a confidence tier: **High**, **Medium**, or **Low**.
+- Generates structured JSON reports for automation/CI pipelines.
+- Generates stylized HTML dashboards suitable for penetration testing deliverables.
+
+---
+
+## 🚀 Installation
+
+SAGE is built for **Kali Linux** and **Windows** environments and installs as a native global CLI command.
+
+### Prerequisites
+- Python 3.10+
+- [Subfinder](https://github.com/projectdiscovery/subfinder) *(optional, but recommended for passive enumeration)*
+
+### Setup
+
+Clone the repository and install the framework globally using pip:
+
 ```bash
-python -m providers.github hostname.github.io
-python -m providers.netlify hostname.netlify.app
-```
-(Use `-m` and dotted notation, not a direct file path — these modules share code via `providers/_base.py`.)
-
-## Important finding: why DNS-only detection isn't enough
-
-During authorized testing (see below), it was confirmed **twice, on two independent providers**, that DNS-level checking alone produces a **false negative**:
-
-- **GitHub Pages** and **Netlify** both run shared infrastructure — the same small set of IPs serves *every* customer's site. Deleting a specific site does **not** remove the A/AAAA record, because the shared servers keep answering regardless of whether that particular site still exists.
-- The only reliable signal is the **HTTP response body**, which contains a distinct "not found" message once the underlying resource is gone.
-
-This directly validates why the project's methodology treats HTTP-level signature verification as mandatory, not optional — a DNS-only tool would have reported both of these real, confirmed-dangling subdomains as safe.
-
-### Testing
-
-Validated against real, authorized subdomains — the domain owner granted explicit permission to test specific subdomains end-to-end (live CNAME → confirmed not vulnerable → underlying resource deleted → confirmed correctly flagged as dangling via HTTP signature match) on:
-- **GitHub Pages** — confirmed dangling, signature: `"There isn't a GitHub Pages site here."`
-- **Netlify** — confirmed dangling, signature: `"Not Found - Request ID"`
-
-The remaining four providers (Heroku, AWS S3, Azure App Service, Vercel) use the same documented public signature patterns used by established open-source recon tools, but have not yet been validated against a live, authorized dangling instance.
-
-### Usage
-
-```bash
+git clone https://github.com/yourusername/SAGE.git
+cd SAGE
 pip install -r requirements.txt
-python core/dns_engine.py subdomain1.example.com subdomain2.example.com
-python providers/__init__.py hostname1 hostname2
-python -m providers.github hostname.github.io
+pip install -e .
 ```
+
+> **Note:** Using `-e` (editable mode) allows you to update provider fingerprint signatures without needing to reinstall the tool.
+
+---
+
+## 💻 Usage Guidelines
+
+Once installed, SAGE can be invoked globally from any terminal directory.
+
+### Standard Scan (Subfinder + Default Wordlist)
+
+```bash
+sage -d example.com
+```
+
+### Advanced Scan with a Custom Wordlist
+
+Bypass the default wordlist in favor of a larger, custom dictionary:
+
+```bash
+sage -d example.com -w /usr/share/wordlists/amass/subdomains.txt
+```
+
+### Stealth / Active-Only Mode
+
+Disable passive Subfinder integration and rely solely on direct DNS brute-forcing:
+
+```bash
+sage -d example.com --no-subfinder
+```
+
+### Generate Deliverables
+
+Output findings to both JSON (for CI/CD tool chaining) and HTML (for visual review):
+
+```bash
+sage -d example.com --json report.json --html dashboard.html
+```
+
+### Common CLI Flags
+
+| Flag | Description |
+|---|---|
+| `-d`, `--domain` | Target domain to scan (required) |
+| `-w`, `--wordlist` | Path to a custom subdomain wordlist |
+| `--no-subfinder` | Disable passive OSINT enumeration; DNS brute-force only |
+| `--json <file>` | Write structured findings to a JSON report |
+| `--html <file>` | Write a stylized HTML dashboard report |
+
+---
+
+## 📁 Directory Structure
+
+```
+SAGE/
+├── config/
+│   ├── providers.json               # Cloud provider fingerprinting rules
+│   └── subdomains_wordlist.txt      # Default active brute-force dictionary
+├── core/
+│   ├── dns_engine.py                # Asynchronous CNAME chain resolution
+│   ├── enumerator.py                # OSINT & brute-force logic
+│   └── scorer.py                    # Confidence evaluation logic
+├── docs/
+│   ├── methodology.md               # Technical overview of the HTTP verification requirement
+│   └── usage.md                     # Extended CLI usage examples
+├── providers/
+│   ├── __init__.py                  # Provider classification engine
+│   ├── _base.py                     # Shared HTTP request logic
+│   └── github.py, aws.py, etc.      # Individual provider signature modules
+├── reports/
+│   ├── json_reporter.py             # Structured CI/CD output
+│   └── html_reporter.py             # Presentation deliverables
+├── templates/
+│   └── report_template.html         # HTML dashboard layout
+├── tests/
+│   └── test_.py                     # Unit testing environment
+├── requirements.txt                 # Project dependencies
+├── setup.py                         # Global package installation configuration
+└── sage.py                          # Master orchestration engine (CLI entrypoint)
+```
+
+---
+
+## 📊 Output Formats
+
+| Format | Use Case |
+|---|---|
+| **JSON** | Machine-readable output for CI/CD pipelines and automated triage |
+| **HTML** | Stylized, human-readable dashboard for client-facing pentest deliverables |
+
+Each finding includes the subdomain, resolved CNAME chain, identified provider, confidence tier (High/Medium/Low), and the HTTP evidence used to reach that conclusion.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome, particularly for:
+- New provider fingerprint signatures (`config/providers.json`)
+- Additional HTTP verification modules under `providers/`
+- Wordlist improvements
+
+Please open an issue or pull request describing the change before submitting large modifications.
+
+---
+
+## ⚠️ Disclaimer
+
+SAGE is intended **solely for authorized security testing** — including penetration tests, bug bounty engagements, and audits of infrastructure you own or have explicit written permission to test. Running SAGE against domains or infrastructure without authorization may violate the law. Users are solely responsible for ensuring they have proper authorization before scanning any target.

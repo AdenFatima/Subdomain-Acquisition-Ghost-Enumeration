@@ -71,13 +71,11 @@ class DNSResult:
     @property
     def is_cname_candidate(self) -> bool:
         """
-        True only if this subdomain has a CNAME pointing somewhere AND
-        that somewhere doesn't currently resolve to an IP. That combination
-        is what makes it worth checking against provider signatures later.
-        A CNAME that still resolves fine is not a takeover candidate.
+        True if this subdomain has a CNAME pointing somewhere.
+        We do NOT check self.has_a_record here because shared providers 
+        (like GitHub/Netlify) keep their IPs active even when dangling.
         """
-        return bool(self.final_target) and not self.has_a_record
-
+        return bool(self.final_target)
 
 # Reliable public resolvers used as a fallback. On some systems (notably
 # Windows), the underlying c-ares library fails to correctly read the
