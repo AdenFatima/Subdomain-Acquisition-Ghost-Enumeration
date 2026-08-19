@@ -1,4 +1,14 @@
-# 🔍 SAGE — Subdomain Acquisition & Ghost Enumeration
+<h1 align="center">SAGE</h1>
+<p align="center">
+  <b>Subdomain Acquisition & Ghost Enumeration Framework</b>
+</p>
+
+<p align="center">
+  <img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-blue">
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Kali%20Linux%20%7C%20Windows-informational">
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-green">
+  <img alt="Status" src="https://img.shields.io/badge/status-active-success">
+</p>
 
 **SAGE** is an advanced, asynchronous subdomain takeover detection framework. It automates the full reconnaissance pipeline — from subdomain discovery to DNS chain resolution, cloud provider fingerprinting, and active HTTP-level vulnerability verification.
 
@@ -9,6 +19,7 @@ Built for speed and accuracy, SAGE eliminates the false negatives common in trad
 ## 📖 Table of Contents
 
 - [The SAGE Methodology](#-the-sage-methodology-solving-the-shared-ip-flaw)
+- [Supported Providers & Signature Verification](#-supported-providers--signature-verification)
 - [Core Architecture & Pipeline](#️-core-architecture--pipeline)
 - [Installation](#-installation)
 - [Usage](#-usage-guidelines)
@@ -32,6 +43,23 @@ Testing against modern cloud infrastructure has shown this approach produces **f
 **The only reliable way to confirm a takeover is to inspect the HTTP response body for exact "resource not found" signatures.**
 
 SAGE enforces HTTP-level signature verification for all known providers, ensuring that every "High Risk" finding is immediately actionable and backed by concrete evidence — not just DNS inference.
+
+---
+
+## 🛡️ Supported Providers & Signature Verification
+
+SAGE actively verifies the following cloud providers at the application layer. Each signature below is matched against the live HTTP response body to definitively confirm a subdomain is unclaimed:
+
+| Provider | Verification Signature | Response Type | Validation Status |
+|---|---|---|---|
+| **GitHub Pages** | `"There isn't a GitHub Pages site here."` | HTML body | ✅ Validated against authorized live targets |
+| **Netlify** | `"Not Found - Request ID"` | HTML body | ✅ Validated against authorized live targets |
+| **AWS S3** | `"NoSuchBucket"` | XML response | ⚙️ Signature-based |
+| **Heroku** | `"No such app"` | HTML body | ⚙️ Signature-based |
+| **Azure App Service** | `"404 Web Site not found"` | HTML body | ⚙️ Signature-based |
+| **Vercel** | `"DEPLOYMENT_NOT_FOUND"` | JSON/HTML body | ⚙️ Signature-based |
+
+By mandating this HTTP-level check across all six supported environments, SAGE eliminates the guesswork of DNS-only inference. Additional providers can be added by extending the fingerprint registry — see [`config/providers.json`](#-directory-structure) and the [Contributing](#-contributing) section below.
 
 ---
 
@@ -79,7 +107,7 @@ SAGE is built for **Kali Linux** and **Windows** environments and installs as a 
 Clone the repository and install the framework globally using pip:
 
 ```bash
-git clone https://github.com/yourusername/SAGE.git
+git clone https://github.com/AdenFatima/SAGE.git
 cd SAGE
 pip install -r requirements.txt
 pip install -e .
@@ -187,8 +215,3 @@ Contributions are welcome, particularly for:
 
 Please open an issue or pull request describing the change before submitting large modifications.
 
----
-
-## ⚠️ Disclaimer
-
-SAGE is intended **solely for authorized security testing** — including penetration tests, bug bounty engagements, and audits of infrastructure you own or have explicit written permission to test. Running SAGE against domains or infrastructure without authorization may violate the law. Users are solely responsible for ensuring they have proper authorization before scanning any target.
