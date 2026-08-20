@@ -35,39 +35,3 @@ def generate_html_report(target_domain: str, findings: list[dict], output_path: 
         f.write(html)
 
     return output_path
-
-
-# Quick manual test hook, same sample data as json_reporter.py.
-if __name__ == "__main__":
-    sample_findings = [
-        {
-            "subdomain": "sagetest.insighthubtech.com",
-            "is_candidate": True,
-            "final_target": "adenfatima.github.io",
-            "provider": "GitHub Pages",
-            "http_status_code": 404,
-            "confidence": "High",
-            "reason": "Exact signature match with status 404 - high-confidence takeover candidate",
-        },
-        {
-            "subdomain": "netlifytest.insighthubtech.com",
-            "is_candidate": True,
-            "final_target": "dreamy-granita-b16a1c.netlify.app",
-            "provider": "Netlify",
-            "http_status_code": 404,
-            "confidence": "High",
-            "reason": "Exact signature match with status 404 - high-confidence takeover candidate",
-        },
-        {
-            "subdomain": "dev.insighthubtech.com",
-            "is_candidate": False,
-            "final_target": None,
-            "provider": None,
-            "http_status_code": None,
-            "confidence": "None",
-            "reason": "Not a CNAME candidate - target still resolves at the DNS level",
-        },
-    ]
-
-    out_path = generate_html_report("insighthubtech.com", sample_findings, "sample_report.html")
-    print(f"Report written to: {out_path}")

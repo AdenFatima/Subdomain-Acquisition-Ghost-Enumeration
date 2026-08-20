@@ -318,5 +318,3 @@ logistics
 supply
 supplier
 suppliers
-sagetest
-netlifytest

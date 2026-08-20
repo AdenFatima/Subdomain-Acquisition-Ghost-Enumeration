@@ -6,9 +6,9 @@ from pathlib import Path
 import aiohttp
 from aiohttp.resolver import ThreadedResolver
 
+from providers import ProviderRegistry, github, heroku, aws, azure, vercel, netlify
 from core.enumerator import enumerate_subdomains
 from core.dns_engine import DNSEngine
-from providers import ProviderRegistry
 from core.scorer import score
 from reports.json_reporter import generate_json_report
 from reports.html_reporter import generate_html_report
@@ -21,13 +21,13 @@ WHITE   = "\033[38;5;255m"   # Pure White (Hosts & Targets)
 RESET   = "\033[0m"
 
 # Direct mapping to individual provider verification modules
-PROVIDER_MODULES = {
-    "github_pages": "providers.github",
-    "heroku": "providers.heroku",
-    "aws_s3": "providers.aws",
-    "azure_app_service": "providers.azure",
-    "vercel": "providers.vercel",
-    "netlify": "providers.netlify",
+VERIFIERS = {
+    "github_pages": github.verify,
+    "heroku": heroku.verify,
+    "aws_s3": aws.verify,
+    "azure_app_service": azure.verify,
+    "vercel": vercel.verify,
+    "netlify": netlify.verify,
 }
 
 def print_banner():
@@ -49,17 +49,15 @@ async def process_subdomain(subdomain: str, dns_engine: DNSEngine, provider_regi
     
     provider_match = None
     http_data = {"reachable": None, "status_code": None, "signature_found": None}
-    
+
     # Phase 2 & 3: Match provider and verify HTTP signature if dangling candidate
     if dns_res.is_cname_candidate and dns_res.final_target:
         provider_match = provider_registry.classify(dns_res.final_target)
         
-        if provider_match and provider_match.provider_id in PROVIDER_MODULES:
-            mod_name = PROVIDER_MODULES[provider_match.provider_id]
-            verifier = __import__(mod_name, fromlist=["verify"])
-            
+        if provider_match and provider_match.provider_id in VERIFIERS:
+            verify_func = VERIFIERS[provider_match.provider_id]
             # Use the original subdomain for the request, NOT the CNAME target
-            http_data = await verifier.verify(subdomain, session)
+            http_data = await verify_func(subdomain, session)
 
     # Phase 4: Confidence Scoring
     scored = score(
@@ -102,6 +100,11 @@ async def run_sage(domain: str, wordlist: Path | None, use_subfinder: bool, json
         return
 
     dns_engine = DNSEngine()
+    
+    print(f"{PRIMARY}[+]{RESET} Checking for wildcard DNS configurations...")
+    if await dns_engine.detect_wildcard(domain):
+        print(f"{ALERT}[!] Wildcard DNS detected for {domain}. This may result in false-positive flooding.{RESET}\n")
+
     provider_registry = ProviderRegistry()
 
     # Phases 2-4: DNS -> Fingerprint -> HTTP -> Scorer

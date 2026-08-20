@@ -187,7 +187,9 @@ SAGE/
 ├── templates/
 │   └── report_template.html         # HTML dashboard layout
 ├── tests/
-│   └── test_.py                     # Unit testing environment
+│   ├── test_.py                     # Unit testing environment
+│   └── test_wordlist.txt            # Testing Wordlist
+
 ├── requirements.txt                 # Project dependencies
 ├── setup.py                         # Global package installation configuration
 └── sage.py                          # Master orchestration engine (CLI entrypoint)
@@ -215,3 +217,8 @@ Contributions are welcome, particularly for:
 
 Please open an issue or pull request describing the change before submitting large modifications.
 
+---
+
+## ⚠️ Disclaimer
+
+This tool is designed for educational purposes, authorized penetration testing, and security research only. Usage of SAGE for scanning targets without prior mutual consent is illegal. The author assumes no liability and is not responsible for any misuse or damage caused by this program.

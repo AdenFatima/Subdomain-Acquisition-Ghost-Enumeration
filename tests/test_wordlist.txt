@@ -1,0 +1,11 @@
+admin
+dev
+sagetest
+admin2
+administrator
+adminpanel
+subscribe
+sub 
+netlifytest
+test
+testing

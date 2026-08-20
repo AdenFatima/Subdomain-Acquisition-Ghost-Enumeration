@@ -1,6 +1,8 @@
-```python
 import unittest
+from unittest.mock import patch
 from core.scorer import score, Confidence
+from core.dns_engine import DNSEngine
+from providers import ProviderRegistry
 
 class TestScoringEngine(unittest.TestCase):
     def test_high_confidence_exact_match(self):
@@ -38,6 +40,69 @@ class TestScoringEngine(unittest.TestCase):
             subdomain="live.example.com"
         )
         self.assertEqual(result.confidence, Confidence.NONE)
+
+
+class TestProviderRegistry(unittest.TestCase):
+    def setUp(self):
+        # Initialize the registry to test the regex matching logic
+        self.registry = ProviderRegistry()
+
+    def test_github_classification(self):
+        """Test that GitHub Pages patterns are caught accurately."""
+        match = self.registry.classify("adenfatima.github.io")
+        self.assertIsNotNone(match)
+        self.assertEqual(match.provider_id, "github_pages")
+
+    def test_unknown_provider(self):
+        """Test that unmapped infrastructure is cleanly skipped."""
+        match = self.registry.classify("unknown-server.com")
+        self.assertIsNone(match)
+
+
+class TestDNSEngine(unittest.IsolatedAsyncioTestCase):
+    @patch('core.dns_engine.DNSEngine._resolve_cname')
+    @patch('core.dns_engine.DNSEngine._resolve_a_or_aaaa')
+    async def test_follow_chain_no_cname(self, mock_a, mock_cname):
+        """Test standard A record resolution with no dangling CNAME."""
+        mock_cname.return_value = None
+        mock_a.return_value = True
+
+        engine = DNSEngine()
+        result = await engine._follow_chain("live.example.com")
+
+        self.assertFalse(result.is_cname_candidate)
+        self.assertTrue(result.has_a_record)
+        self.assertEqual(result.cname_chain, [])
+
+    @patch('core.dns_engine.DNSEngine._resolve_cname')
+    @patch('core.dns_engine.DNSEngine._resolve_a_or_aaaa')
+    async def test_follow_chain_with_dangling_cname(self, mock_a, mock_cname):
+        """Test a vulnerable CNAME chain that points to an abandoned edge server."""
+        # Simulates: test.example.com -> target.github.io -> (No further CNAME)
+        mock_cname.side_effect = ["target.github.io", None]
+        mock_a.return_value = False  # The final target lacks an A record
+
+        engine = DNSEngine()
+        result = await engine._follow_chain("test.example.com")
+
+        self.assertTrue(result.is_cname_candidate)
+        self.assertFalse(result.has_a_record)
+        self.assertEqual(result.final_target, "target.github.io")
+        self.assertEqual(result.cname_chain, ["target.github.io"])
+        
+    @patch('core.dns_engine.DNSEngine._resolve_cname')
+    @patch('core.dns_engine.DNSEngine._resolve_a_or_aaaa')
+    async def test_follow_chain_max_depth_loop(self, mock_a, mock_cname):
+        """Test that the engine breaks out of infinite CNAME loops safely."""
+        # Simulates a misconfigured DNS setup looping on itself
+        mock_cname.return_value = "loop.example.com"
+        mock_a.return_value = False
+        
+        engine = DNSEngine()
+        result = await engine._follow_chain("loop.example.com")
+        
+        # Should stop safely at the MAX_CNAME_CHAIN_DEPTH (which is 8)
+        self.assertEqual(len(result.cname_chain), 8)
 
 if __name__ == '__main__':
     unittest.main()
